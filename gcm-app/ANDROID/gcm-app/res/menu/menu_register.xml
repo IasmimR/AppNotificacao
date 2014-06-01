@@ -1,0 +1,15 @@
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:context="org.gcm.android.RegisterActivity" >
+    
+    <item
+        android:id="@+id/action_exit"
+        android:icon="@drawable/ic_action_search"
+        android:orderInCategory="1"
+        android:alphabeticShortcut="e"
+        android:title="@string/action_exit"
+        app:showAsAction="always"/>
+    
+
+</menu>

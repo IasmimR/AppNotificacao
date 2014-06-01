@@ -1,0 +1,396 @@
+package org.gcm.android;
+
+import java.io.IOException;
+
+import org.gcm.android.config.IConfig;
+import org.gcm.android.enumeradores.EnumPreferences;
+import org.gcm.android.util.ConnectionDetector;
+import org.gcm.android.util.Util;
+
+import android.accounts.Account;
+import android.accounts.AccountManager;
+import android.app.AlertDialog;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.DialogInterface;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager.NameNotFoundException;
+import android.os.AsyncTask;
+import android.os.Bundle;
+import android.os.Handler;
+import android.provider.Settings;
+import android.support.v7.app.ActionBarActivity;
+import android.text.TextUtils;
+import android.util.Log;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
+import android.view.View;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.Toast;
+
+import com.google.android.gms.gcm.GoogleCloudMessaging;
+
+/***
+ * Classe responsável por cadastrar o usuário junto ao servidor GCM e enviar o regId ao servidor 
+ * PHP.
+ * @author Iasmim Ribeiro
+ * @since 1.0
+ * @version 1.0
+ */
+public class RegisterActivity extends ActionBarActivity {
+
+	EditText mInputNome;
+	EditText mInputEmail;
+	Button mBtnRegistrar;
+	GoogleCloudMessaging mGcm;
+	Context mContext;
+	String mRegId;
+	ConnectionDetector mCnDetector;
+
+	public static final String REG_ID = "regId";
+	private static final String APP_VERSION = "appVersion";
+
+	/**
+	 * Tag de identificação da classe junto ao log do android.
+	 */
+	static final String TAG = RegisterActivity.class.getSimpleName();
+		
+	@Override
+	public void onCreate(Bundle savedInstanceState) {
+		super.onCreate(savedInstanceState);
+		setContentView(R.layout.activity_register);
+		
+		registerReceiver(mHandleMessageReceiver, new IntentFilter("android.net.wifi.WIFI_STATE_CHANGED"));
+		
+		mCnDetector = new ConnectionDetector(this);
+		if(mCnDetector.isConnected() == false){
+			dialogNoInternetConnection();
+			return;
+		}
+		
+		if(aparelhoPossuiContaGoogle() == false){
+			Log.i(TAG, "Não ha conta registrada");
+			dialogAddGoogleAccount();
+		}
+		
+		mContext = getApplicationContext();
+		
+		/* Dispara a requisição para obter o regid GCM. */
+		mRegId = getRegistrationId(getApplicationContext());
+		if(TextUtils.isEmpty(mRegId)){
+			if(mCnDetector.isConnected()){
+				registerUserGCMServer();
+			}
+		}
+		else{
+			startMainActivity(true);
+		}
+		
+		mInputEmail = (EditText) findViewById(R.id.input_email);
+		mInputNome = (EditText) findViewById(R.id.input_nome);
+		mBtnRegistrar = (Button) findViewById(R.id.btn_cadastrar);
+		mBtnRegistrar.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View arg0) {
+				if (TextUtils.isEmpty(mRegId)) {
+					if(mCnDetector.isConnected() == false){
+						dialogNoInternetConnection();
+						return;
+					}
+					
+					Toast.makeText(getApplicationContext(), "Não há id GCM para este dispositivo.",
+							Toast.LENGTH_LONG).show();					
+					return;
+				} else {
+					
+					boolean inconsistencia = false;
+					
+					if(mInputNome.getText().toString().trim().length() == 0){
+						mInputNome.setError("Campo não deve ficar em branco!");
+						mInputNome.requestFocus();
+						inconsistencia = true;
+					}
+					
+					if(mInputEmail.getText().toString().trim().length() == 0){
+						mInputEmail.setError("Campo não deve ficar em branco!");
+						mInputEmail.requestFocus();
+						inconsistencia = true;
+					}
+					
+					if(inconsistencia){
+						return;
+					}
+					
+					startMainActivity(false);
+					Log.d("RegisterActivity", "onClick of Share: After finish.");
+				}
+			}
+		});
+	}
+	
+	@Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        Account[] accounts = AccountManager.get(this).getAccounts();
+        if((accounts.length > 0) == false) {
+        	dialogNoAccountAdded();        
+        }
+    }
+	
+	@Override
+	public boolean onCreateOptionsMenu(Menu menu) {	
+	    MenuInflater inflater = getMenuInflater();
+	    inflater.inflate(R.menu.menu_register, menu);
+	    return super.onCreateOptionsMenu(menu);
+	} 
+	
+	@Override
+	 public boolean onOptionsItemSelected(MenuItem item) {
+	    switch (item.getItemId()) {
+	    case R.id.action_exit:
+	      Toast.makeText(this, "Settings selected", Toast.LENGTH_SHORT)
+	          .show();
+	      break;
+	    }
+
+	    return true;
+	 } 
+	
+	@Override
+	public void onStart(){
+		super.onStart();
+	}
+	
+	@Override
+    public void onDestroy(){
+    	unregisterReceiver(mHandleMessageReceiver);
+    	super.onDestroy();
+    }
+	
+	/**
+	 * Envia uma requisição de registro ao servidor do google GCM.
+	 * @return RegId Gerado pelo google GCM server.
+	 */
+	private final void registerUserGCMServer() {
+		registerInBackground();
+	}
+	
+	/**
+	 * Obtém a versão corrente do aplicativo para armazenar a mesma junto a sharedpreference.
+	 * @param context Contexto de execução.
+	 * @return Versão do app.
+	 */
+	private static int getAppVersion(Context context) {
+		try {
+			PackageInfo packageInfo = context.getPackageManager()
+					.getPackageInfo(context.getPackageName(), 0);
+			return packageInfo.versionCode;
+		} catch (NameNotFoundException e) {
+			Log.d("RegisterActivity",
+					"I never expected this! Going down, going down!" + e);
+			throw new RuntimeException(e);
+		}
+	}
+
+	/**
+	 * Obtém o regId da sharedpreference.
+	 * @param context Contexto de execução.
+	 * @return String que representa o regId do aparelho.
+	 */
+	private String getRegistrationId(Context context) {
+		final SharedPreferences prefs = getSharedPreferences(
+				MainActivity.class.getSimpleName(), Context.MODE_PRIVATE);
+		String registrationId = prefs.getString(REG_ID, "");
+		if (registrationId == null) {
+			Log.i(TAG, "Registration not found.");
+			return "";
+		}
+		int registeredVersion = prefs.getInt(APP_VERSION, Integer.MIN_VALUE);
+		int currentVersion = getAppVersion(context);
+		if (registeredVersion != currentVersion) {
+			Log.i(TAG, "App version changed.");
+			return "";
+		}
+		return registrationId;
+	}
+	
+	/**
+	 * Define o valor do regId na sharedpreference.
+	 * @param context Contexto de execução.
+	 * @param regId String regId do aparelho.
+	 */
+	private void setRegistrationId(Context context, String regId) {
+		int appVersion = getAppVersion(context);
+		
+		Util.setPreference(context,REG_ID, regId );
+		Util.setPreference(context,APP_VERSION, appVersion );
+	}
+			
+	/**
+	 * Thread assíncrona para registrar o usuário junto ao servidor GCM.
+	 */
+	private final void registerInBackground() {	
+		new AsyncTask<Void, Void, String>() {
+			boolean isSuccessed = false;
+			
+			@Override
+			protected String doInBackground(Void... params) {
+				String msg = "";
+				try {
+					if (mGcm == null) {
+						mGcm = GoogleCloudMessaging.getInstance(mContext);
+					}
+					mRegId = mGcm.register(IConfig.GOOGLE_PROJECT_ID);
+					isSuccessed = true;
+					
+					Log.d(TAG, "registerInBackground - regId: "
+							+ mRegId);
+					msg = mRegId;
+					
+					setRegistrationId(mContext, mRegId);
+				} catch (IOException ex) {
+					msg = "Error :" + ex.getMessage();
+					Log.d(TAG, "Error: " + msg);
+				}
+				Log.d(TAG, "AsyncTask completed: " + msg);
+				return msg;
+			}
+
+			@Override
+			protected void onPostExecute(String msg) {
+				if(isSuccessed == true){
+					Toast.makeText(getApplicationContext(), R.string.toast_registration_id , Toast.LENGTH_LONG).show();
+				}else{
+					Toast.makeText(getApplicationContext(), R.string.toast_registration_id_exception + msg, Toast.LENGTH_LONG).show();
+				}
+			}
+		}.execute(null, null, null);
+	}
+	
+	/**
+	 * Diálogo de solicitação de registro de uma conta google.
+	 */
+	private final void dialogAddGoogleAccount() {
+	     AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(this);
+	     dialogBuilder.setIcon(android.R.drawable.ic_dialog_info);
+	     dialogBuilder.setTitle(R.string.dialog_title);
+	     dialogBuilder.setMessage(R.string.dialog_message);
+	     dialogBuilder.setCancelable(false);
+
+	     dialogBuilder.setPositiveButton(R.string.btn_sim,
+	     new DialogInterface.OnClickListener() {
+	         public void onClick(DialogInterface dialog, int which) {
+	        	 /* Activity para registro da conta google */
+	        	 startActivityForResult(new Intent(Settings.ACTION_ADD_ACCOUNT), 0);
+	            }
+	     });
+
+	     dialogBuilder.setNegativeButton(R.string.btn_nao,
+	     new DialogInterface.OnClickListener() {
+	         public void onClick(DialogInterface dialog, int which) {
+	        	 	dialog.dismiss();
+	        	 
+	        	 	dialogNoAccountAdded();
+	            }
+	     });    
+	  
+	     AlertDialog helpDialog = dialogBuilder.create();
+	     helpDialog.show();
+	}
+	
+	/**
+	 * Indica se o aparelho possui uma conta google registrada.
+	 * @return Indicador de existência da conta do google.
+	 */
+	private final boolean aparelhoPossuiContaGoogle(){
+        AccountManager accountManager = AccountManager.get(this);
+        Account[] accountArray = accountManager.getAccountsByType("com.google");
+        return accountArray.length >= 1 ? true : false;
+	}
+	
+	/**
+	 * Diálogo informando que a conta não foi adicionada.
+	 */
+	private final void dialogNoAccountAdded(){
+		 AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(this);
+  	     dialogBuilder.setIcon(android.R.drawable.ic_dialog_alert);
+  	     dialogBuilder.setTitle(R.string.dialog_title_fail);
+  	     dialogBuilder.setMessage(R.string.dialog_message_fail);
+  	     dialogBuilder.setCancelable(false);
+  	     
+  	     final AlertDialog alertDialog = dialogBuilder.create();
+  	     alertDialog.show();
+  	     
+  	  new Handler().postDelayed(new Runnable() {
+  	      @Override
+  	      public void run() {
+  	    	  alertDialog.dismiss();
+  	    	  finish();
+  	      }
+  	    }, 3000);
+	}
+	
+	/**
+	 * Diálogo informando que não ha internet no disposivito.
+	 */
+	private final void dialogNoInternetConnection(){
+		 AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(this);
+  	     dialogBuilder.setIcon(android.R.drawable.ic_dialog_alert);
+  	     dialogBuilder.setTitle(R.string.dialog_title_no_internetConnection);
+	     dialogBuilder.setMessage(R.string.dialog_message_no_internetConnection);
+	     dialogBuilder.setCancelable(false);
+	     
+	     dialogBuilder.setPositiveButton(android.R.string.ok, null);
+  	     
+  	     final AlertDialog alertDialog = dialogBuilder.create();
+  	     alertDialog.show();
+	}
+
+	/**
+	 * Inicia a activity main, passando os parâmetros necessários.
+	 * @param registredUser Indica se o usuário já está registrado.
+	 */
+	private void startMainActivity(Boolean registredUser) {
+		Intent i = new Intent(getApplicationContext(),
+				MainActivity.class);
+		
+		if(registredUser){
+			i.putExtra("regId", mRegId);
+			i.putExtra(EnumPreferences.NAME.toString(), Util.getPreference(getApplicationContext(), EnumPreferences.NAME.toString(), String.class));
+			i.putExtra(EnumPreferences.EMAIL.toString(), Util.getPreference(getApplicationContext(), EnumPreferences.EMAIL.toString(), String.class));
+		}else{
+			i.putExtra("regId", mRegId);
+			i.putExtra(EnumPreferences.NAME.toString(), mInputNome.getText().toString().trim());
+			i.putExtra(EnumPreferences.EMAIL.toString(), mInputEmail.getText().toString().trim());
+		}
+		
+		i.putExtra(EnumPreferences.USUARIO_REGISTRADO.toString(), registredUser);
+		i.putExtra(EnumPreferences.LISTA_DE_MENSAGENS.toString(), Util.getPreference(getApplicationContext(), EnumPreferences.LISTA_DE_MENSAGENS.toString(), String.class));
+		Log.d("RegisterActivity",
+				"onClick of Share: Before starting main activity.");
+		startActivity(i);
+		finish();
+	}
+	
+	private final BroadcastReceiver mHandleMessageReceiver = new BroadcastReceiver() {
+		/**
+    	 * Tag de identificação no log.
+    	 */
+    	public static final String TAG = "RegisterActivity";
+    	
+    	@Override
+    	public void onReceive(Context context, Intent intent){
+    		ConnectionDetector cn = new ConnectionDetector(RegisterActivity.this);
+    		String regId = getRegistrationId(RegisterActivity.this);
+    		
+    		if(cn.isConnected() && regId == null){
+    			RegisterActivity.this.registerInBackground();
+    		}
+    	}
+
+	};
+}

@@ -1,0 +1,102 @@
+/*
+ * (C) Copyright ${year} Nuxeo SA (http://nuxeo.com/) and others.
+ *
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v1.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v10.html
+ *
+ * Contributors:
+ *     Iasmim Ribeiro
+ */
+/* 
+    Created on : 27/05/2014, 23:47:52
+    Author     : Iasmim Ribeiro
+*/
+
+body{
+    padding: 20px;
+    overflow: hidden !important;
+    height: 650px;
+    position: relative;
+}
+*{
+    outline: 0 !important;
+}
+.alert{
+    position: absolute;
+    bottom: 0;
+    display: none;
+}
+img#icone{
+    margin-right: 10px;
+}
+.btn-default:focus{
+    background-color: #fff !important;
+}
+
+li > a{
+    -webkit-transition: ease all 0.5s;
+}
+
+.gcm-text{
+    padding: 10px;
+    display: inline-block;
+    width: 450px;
+    position: relative;
+    margin-top: 25px;
+    float:left;
+}
+
+.gcm-text textarea{
+    padding: 5px;
+    width: 100%;
+    resize: none;
+    height: 113px;
+    border-radius: 3px;
+    border: thin solid #ccc;
+    background-color: #FCFCFC;
+    font-family: "Helvetica Neue",Helvetica,Arial,sans-serif;
+    z-index: 0;
+}
+
+.gcm-text > div label:not(.badge){
+    font-weight: 100;
+}
+
+.gcm-text > div label.group-name{
+    color: #ccc;
+}
+
+.gcm-text > a.btn{
+    position: absolute;
+    right: 17px;
+    bottom: 21px;
+}
+
+.gcm-text .floatRight{
+    float: right;
+}
+
+.dropdown-menu{
+    overflow-y: auto;
+    height: 22.2em;
+}
+
+#form_cadastro_grupos{
+    width: 41%;
+    display: inline-block;
+    float: right;
+    display: none;
+}
+#contador{
+    display: inline-block;
+    margin: 0% 16%;
+    padding: 0;
+}
+
+/* Classes utilitarias */
+.destaque{
+    color: #000 !important;
+    font-weight: bold !important;
+}

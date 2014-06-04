@@ -1,0 +1,281 @@
+package org.gcm.android;
+
+import java.io.IOException;
+
+import org.gcm.android.config.IConfig;
+
+import android.accounts.Account;
+import android.accounts.AccountManager;
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.Context;
+import android.content.DialogInterface;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager.NameNotFoundException;
+import android.os.AsyncTask;
+import android.os.Bundle;
+import android.os.Handler;
+import android.provider.Settings;
+import android.text.TextUtils;
+import android.util.Log;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.View;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.Toast;
+
+import com.google.android.gms.gcm.GoogleCloudMessaging;
+
+/***
+ * Classe responsável por cadastrar o usuário junto ao servidor GCM e enviar o regId ao servidor 
+ * PHP.
+ * @author Iasmim Ribeiro
+ * @since 1.0
+ * @version 1.0
+ */
+public class RegisterActivity extends Activity {
+
+	EditText inputNome;
+	EditText inputEmail;
+	Button btnRegistrar;
+	GoogleCloudMessaging gcm;
+	Context context;
+	String regId;
+
+	public static final String REG_ID = "regId";
+	private static final String APP_VERSION = "appVersion";
+
+	/**
+	 * Tag de identificação da classe junto ao log do android.
+	 */
+	static final String TAG = RegisterActivity.class.getSimpleName();
+	
+	@Override
+	public void onCreate(Bundle savedInstanceState) {
+		super.onCreate(savedInstanceState);
+		setContentView(R.layout.activity_register);
+		
+		if(aparelhoPossuiContaGoogle() == false){
+			Log.i(TAG, "Não ha conta registrada");
+			dialogAddGoogleAccount();
+		}
+		
+		context = getApplicationContext();
+
+		/* Dispara a requisição para obter o regid GCM. */
+		regId = getRegistrationId(getApplicationContext());
+		if(TextUtils.isEmpty(regId)){
+			registerUserGCMServer();
+		}
+		else{
+			
+		}
+		
+		inputEmail = (EditText) findViewById(R.id.input_email);
+		inputNome = (EditText) findViewById(R.id.input_nome);
+		btnRegistrar = (Button) findViewById(R.id.btn_cadastrar);
+		btnRegistrar.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View arg0) {
+				if (TextUtils.isEmpty(regId)) {
+					Toast.makeText(getApplicationContext(), "RegId is empty!",
+							Toast.LENGTH_LONG).show();
+				} else {
+					Intent i = new Intent(getApplicationContext(),
+							MainActivity.class);
+					i.putExtra("regId", regId);
+					Log.d("RegisterActivity",
+							"onClick of Share: Before starting main activity.");
+					startActivity(i);
+					finish();
+					Log.d("RegisterActivity", "onClick of Share: After finish.");
+				}
+			}
+		});
+	}
+	
+	@Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        Account[] accounts = AccountManager.get(this).getAccounts();
+        if(accounts.length > 0) {
+        	dialogNoAccountAdded();        
+        }
+    }
+	
+	@Override
+	public boolean onCreateOptionsMenu(Menu menu) {
+	    MenuInflater inflater = getMenuInflater();
+	    inflater.inflate(R.menu.main, menu);
+	    return true;
+	} 
+	
+	/**
+	 * Envia uma requisição de registro ao servidor do google GCM.
+	 * @return RegId Gerado pelo google GCM server.
+	 */
+	private final void registerUserGCMServer() {
+		registerInBackground();
+	}
+	
+	/**
+	 * Obtém a versão corrente do aplicativo para armazenar a mesma junto a sharedpreference.
+	 * @param context Contexto de execução.
+	 * @return Versão do app.
+	 */
+	private static int getAppVersion(Context context) {
+		try {
+			PackageInfo packageInfo = context.getPackageManager()
+					.getPackageInfo(context.getPackageName(), 0);
+			return packageInfo.versionCode;
+		} catch (NameNotFoundException e) {
+			Log.d("RegisterActivity",
+					"I never expected this! Going down, going down!" + e);
+			throw new RuntimeException(e);
+		}
+	}
+
+	/**
+	 * Obtém o regId da sharedpreference.
+	 * @param context Contexto de execução.
+	 * @return String que representa o regId do aparelho.
+	 */
+	private String getRegistrationId(Context context) {
+		final SharedPreferences prefs = getSharedPreferences(
+				MainActivity.class.getSimpleName(), Context.MODE_PRIVATE);
+		String registrationId = prefs.getString(REG_ID, "");
+		if (registrationId.isEmpty()) {
+			Log.i(TAG, "Registration not found.");
+			return "";
+		}
+		int registeredVersion = prefs.getInt(APP_VERSION, Integer.MIN_VALUE);
+		int currentVersion = getAppVersion(context);
+		if (registeredVersion != currentVersion) {
+			Log.i(TAG, "App version changed.");
+			return "";
+		}
+		return registrationId;
+	}
+	
+	/**
+	 * Define o valor do regId na sharedpreference.
+	 * @param context Contexto de execução.
+	 * @param regId String regId do aparelho.
+	 */
+	private void setRegistrationId(Context context, String regId) {
+		final SharedPreferences prefs = getSharedPreferences(
+				MainActivity.class.getSimpleName(), Context.MODE_PRIVATE);
+		int appVersion = getAppVersion(context);
+		Log.i(TAG, "Saving regId on app version " + appVersion);
+		SharedPreferences.Editor editor = prefs.edit();
+		editor.putString(REG_ID, regId);
+		editor.putInt(APP_VERSION, appVersion);
+		editor.commit();
+	}
+	
+	/**
+	 * Thread assíncrona para registrar o usuário junto ao servidor GCM.
+	 */
+	private final void registerInBackground() {	
+		new AsyncTask<Void, Void, String>() {
+			boolean isSuccessed = false;
+			
+			@Override
+			protected String doInBackground(Void... params) {
+				String msg = "";
+				try {
+					if (gcm == null) {
+						gcm = GoogleCloudMessaging.getInstance(context);
+					}
+					regId = gcm.register(IConfig.GOOGLE_PROJECT_ID);
+					isSuccessed = true;
+					
+					Log.d(TAG, "registerInBackground - regId: "
+							+ regId);
+					msg = regId;
+
+					setRegistrationId(context, regId);
+				} catch (IOException ex) {
+					msg = "Error :" + ex.getMessage();
+					Log.d(TAG, "Error: " + msg);
+				}
+				Log.d(TAG, "AsyncTask completed: " + msg);
+				return msg;
+			}
+
+			@Override
+			protected void onPostExecute(String msg) {
+				if(isSuccessed == true){
+					Toast.makeText(getApplicationContext(), R.string.toast_registration_id , Toast.LENGTH_LONG).show();
+				}else{
+					Toast.makeText(getApplicationContext(), R.string.toast_registration_id_exception + msg, Toast.LENGTH_LONG).show();
+				}
+			}
+		}.execute(null, null, null);
+	}
+	
+	/**
+	 * Diálogo de solicitação de registro de uma conta google.
+	 */
+	private final void dialogAddGoogleAccount() {
+	     AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(this);
+	     dialogBuilder.setIcon(android.R.drawable.ic_dialog_info);
+	     dialogBuilder.setTitle(R.string.dialog_title);
+	     dialogBuilder.setMessage(R.string.dialog_message);
+	     dialogBuilder.setCancelable(false);
+
+	     dialogBuilder.setPositiveButton("sim",//R.string.btn_sim,
+	     new DialogInterface.OnClickListener() {
+	         public void onClick(DialogInterface dialog, int which) {
+	        	 /* Activity para registro da conta google */
+	        	 startActivityForResult(new Intent(Settings.ACTION_ADD_ACCOUNT), 0);
+	            }
+	     });
+
+	     dialogBuilder.setNegativeButton("nao", //R.string.btn_nao,
+	     new DialogInterface.OnClickListener() {
+	         public void onClick(DialogInterface dialog, int which) {
+	        	 	 dialog.dismiss();
+	        	 
+	        	 	dialogNoAccountAdded();
+	            }
+	     });    
+
+	     AlertDialog helpDialog = dialogBuilder.create();
+	     helpDialog.show();
+	}
+	
+	/**
+	 * Indica se o aparelho possui uma conta google registrada.
+	 * @return Indicador de existência da conta do google.
+	 */
+	private final boolean aparelhoPossuiContaGoogle(){
+        AccountManager accountManager = AccountManager.get(this);
+        Account[] accountArray = accountManager.getAccountsByType("com.google");
+        return accountArray.length >= 1 ? true : false;
+	}
+	
+	/**
+	 * Diálogo informando que a conta não foi adicionada.
+	 */
+	private final void dialogNoAccountAdded(){
+		 AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(this);
+  	     dialogBuilder.setIcon(android.R.drawable.ic_dialog_alert);
+  	     dialogBuilder.setTitle(R.string.dialog_title_fail);
+  	     dialogBuilder.setMessage(R.string.dialog_message_fail);
+  	     dialogBuilder.setCancelable(false);
+  	     
+  	     final AlertDialog alertDialog = dialogBuilder.create();
+  	     alertDialog.show();
+  	     
+  	  new Handler().postDelayed(new Runnable() {
+  	      @Override
+  	      public void run() {
+  	    	  alertDialog.dismiss();
+  	    	  finish();
+  	      }
+  	    }, 3000);
+	}
+}

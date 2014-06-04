@@ -1,0 +1,50 @@
+1400798063718	Delete element
+1400939254077	Rename method 'deviceHasGoogleAccount'
+1400939662810	Rename local variable 'helpBuilder'
+1400939889708	Rename local variable 'dialogBuilder'
+1400942836855	Rename method 'popup'
+1400943808518	Rename method 'registerGCM'
+1400943891022	Rename method 'registrGCMServidor'
+1400944683564	Rename method 'storeRegistrationId'
+1400948647041	Rename method 'registreUsuairioGCMServidor'
+1400948660304	Rename method 'shareRegIdWithAppServer'
+1400948806385	Rename type 'ShareExternalServer'
+1400948840836	Extract method 'monteRequisicao'
+1400948862554	Extract method 'realizeRequisicao'
+1400949258240	Rename package 'com.javapapers.android'
+1400949282140	Move compilation unit
+1400949306408	Move compilation unit
+1400949323430	Move compilation unit
+1400949332224	Move compilation unit
+1400949794447	Rename method 'sendNotification'
+1400953896375	Rename type 'Config'
+1400954071854	Rename type 'RegisterActivity'
+1400954734947	Rename type 'CompartilhePHPServidor'
+1400954945087	Rename compilation unit 'RegistroActivity.java'
+1400954959082	Rename type 'SharedWithPHPServer'
+1400955277008	Delete element
+1400955311494	Delete element
+1400955636862	Rename method 'registreUsuarioGCMServidor'
+1400955661992	Rename method 'dialogoAdicioneContaGoogle'
+1400955682692	Rename method 'dialogoContaNaoAdicionada'
+1400955692237	Rename method 'dialogNoAccontAdded'
+1400955815911	Delete element
+1400955826356	Rename resource 'main.xml'
+1400959472186	Delete element
+1400962228745	Rename method 'aparelhoPossuiContaGoogle'
+1400963930184	Rename field 'inputNome'
+1400963939753	Rename field 'inputEmail'
+1400964312148	Delete element
+1400965045143	Rename field 'inputNome'
+1400965055219	Rename field 'inputEmail'
+1400965062754	Rename field 'btnRegistrar'
+1400965083836	Rename field 'gcm'
+1400965090323	Rename field 'context'
+1400965096890	Rename field 'regId'
+1400966853906	Delete element
+1400966916548	Extract method 'startMainActivity'
+1400967510928	Rename enum constant 'NOME'
+1400968785864	Extract method 'sendIdToServer'
+1400971345987	Rename resource 'custom_textview.xml'
+1400973259269	Move compilation unit
+1400975745368	Rename compilation unit 'GcmDesserializador.java'
